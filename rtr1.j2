@@ -1,57 +1,53 @@
 !
-! Bootstrap configuration for rtr1 (Nokia SR Linux)
-! Management interface and SSH configuration
+! Bootstrap configuration for rtr1 (Arista cEOS)
+! Router configuration
+! PROBLEM: Ethernet2 is shutdown - breaks connectivity to mgmt!
 !
-enter candidate
-/system network-instance mgmt interface mgmt0
-    ipv4 address 172.20.20.14/24
-    admin-state enable
+hostname {{ hostname }}
 !
-! Data interfaces
-/interface ethernet-1/1
-    admin-state enable
-    description "Data interface - connected to dist1"
-    subinterface 0
-        admin-state enable
-        type bridged
-        vlan encap single-tagged vlan-id 10
+! Configure VLANs
+vlan 10
+   name DATA_VLAN
 !
-/interface ethernet-1/2
-    admin-state enable
-    description "Data interface - connected to mgmt"
-    subinterface 0
-        admin-state enable
-        type bridged
-        vlan encap untagged
+! Management interface
+interface Management0
+   description Management Interface
+   ip address 172.20.20.14/24
+   no shutdown
 !
-/interface ethernet-1/3
-    admin-state enable
-    description "Data interface - available for connections"
-    subinterface 0
-        admin-state enable
-        type bridged
-        vlan encap single-tagged vlan-id 10
+! Data interfaces - Layer 2 switchports
+interface Ethernet1
+   description Uplink to dist1
+   switchport mode trunk
+   switchport trunk allowed vlan 10
+   no shutdown
 !
-! Create bridge network instance for VLAN 10
-/network-instance data-vlan10
-    type mac-vrf
-    admin-state enable
-    interface ethernet-1/1.0
-    interface ethernet-1/2.0
+interface Ethernet2
+   shutdown
+   description Connected to mgmt server - DISABLED
+   switchport mode access
+   switchport access vlan 10
+   ! PROBLEM: Interface is SHUTDOWN! Needs to be enabled
 !
-/system aaa authentication admin-user admin
-    password "$6$ZO4fTTXov0qRouxA$nvU5sXI6UeBwL6AF0QIp1zOY.h/Jn57kyohuE91U8z2bCVd93H8fPI73SD4xotAt.G0Wj/zYrixqWsRw7hWBl/"
+interface Ethernet3
+   description Available for connections
+   shutdown
 !
-/system gnmi-server
-    admin-state enable
-    network-instance mgmt
-    port 57400
-    use-plaintext true
+! Enable gNMI
+management api gnmi
+   transport grpc default
+      port 6030
 !
-/system json-rpc-server
-    admin-state enable
-    network-instance mgmt
-    port 80
+! Enable NETCONF
+management api netconf
+   transport ssh default
 !
-commit stay
+! Admin user configuration
+username admin privilege 15 secret admin
 !
+! Enable eAPI (REST API)
+management api http-commands
+   no shutdown
+   protocol https
+!
+end
