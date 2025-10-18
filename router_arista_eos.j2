@@ -1,6 +1,7 @@
 !
-! Bootstrap configuration for dist1 (Arista cEOS)
-! Distribution switch configuration
+! Bootstrap configuration for {{ hostname }} (Arista cEOS)
+! Router configuration
+! PROBLEM: Ethernet2 is shutdown - breaks connectivity to mgmt!
 !
 hostname {{ hostname }}
 !
@@ -11,27 +12,26 @@ vlan 10
 ! Management interface
 interface Management0
    description Management Interface
-   ip address 172.20.20.13/24
+   ip address {{ primary_ip4.address }}
    no shutdown
 !
 ! Data interfaces - Layer 2 switchports
 interface Ethernet1
-   description Connected to access1
+   description Uplink to dist1
    switchport mode trunk
    switchport trunk allowed vlan 10
    no shutdown
 !
 interface Ethernet2
-   description Connected to access2
-   switchport mode trunk
-   switchport trunk allowed vlan 10
-   no shutdown
+   shutdown
+   description Connected to mgmt server - DISABLED
+   switchport mode access
+   switchport access vlan 10
+   ! PROBLEM: Interface is SHUTDOWN! Needs to be enabled - THIS IS FOR DEMO
 !
 interface Ethernet3
-   description Connected to rtr1
-   switchport mode trunk
-   switchport trunk allowed vlan 10
-   no shutdown
+   description Available for connections
+   shutdown
 !
 ! Enable gNMI
 management api gnmi
@@ -51,3 +51,4 @@ management api http-commands
    protocol https
 !
 end
+

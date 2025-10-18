@@ -1,32 +1,36 @@
 !
-! Bootstrap configuration for access2 (Arista EOS)
+! Bootstrap configuration for {{ hostname }} (Arista EOS)
 ! Management interface and SSH configuration
+! PROBLEM: Ethernet2 is in wrong VLAN (999) - breaks connectivity to workstation1!
 !
 hostname {{ hostname }}
 !
 interface Management0
-   ip address 172.20.20.12/24
+   ip address {{ primary_ip4.address }}
    no shutdown
    description "Management interface"
 !
 ! Data interfaces
 interface Ethernet1
    no shutdown
-   description "Data interface - connected to dist1"
+   description "Uplink to dist1"
    switchport mode trunk
-   switchport trunk allowed vlan all
+   switchport trunk allowed vlan 10
 !
 interface Ethernet2
-   no shutdown
-   description "Data interface - available for connections"
+   shutdown
+   description "Connected to workstation1 - DISABLED"
    switchport mode access
-   switchport access vlan 20
+   switchport access vlan 10
+   ! PROBLEM: Interface is SHUTDOWN! Needs to be enabled
 !
 interface Ethernet3
-   no shutdown
-   description "Data interface - available for connections"
-   switchport mode access
-   switchport access vlan 30
+   shutdown
+   description "Available for connections"
+!
+! Define VLANs
+vlan 10
+   name Data_VLAN
 !
 ! Enable SSH
 management ssh
@@ -41,13 +45,7 @@ management api http-commands
 ! Basic security
 username admin privilege 15 secret admin
 !
-! Enable logging
-logging host 172.20.20.1
-!
-! Enable routing to host
-ip routing
-ip route 0.0.0.0 0.0.0.0 Management0 172.20.20.1
-!
 ! Save configuration
 write memory
 !
+
