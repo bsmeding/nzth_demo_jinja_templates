@@ -1,51 +1,144 @@
 !
-! Bootstrap configuration for {{ hostname }} (Arista EOS)
-! Management interface and SSH configuration
-! PROBLEM: Ethernet2 is in wrong VLAN (999) - breaks connectivity to workstation1!
+! Advanced Bootstrap Configuration Template for {{ hostname }}
+! Generated from Nautobot Golden Config
+! Platform: {{ platform.name }} ({{ platform.manufacturer.name }})
+! Location: {{ location.name }}{% if location.parent %} / {{ location.parent.name }}{% endif %}
+! Role: {{ role.name }}
+{% if serial %}! Serial Number: {{ serial }}{% endif %}
+{% if tenant %}! Tenant: {{ tenant.name }}{% endif %}
+{% if tags %}! Tags: {% for tag in tags %}{{ tag.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}
 !
 hostname {{ hostname }}
 !
+{% if config_context.domain_name %}
+ip domain-name {{ config_context.domain_name }}
+{% endif %}
+!
+! Management Interface
+{% if primary_ip4 %}
 interface Management0
+   description Management Interface{% if primary_ip4.description %} - {{ primary_ip4.description }}{% endif %}
    ip address {{ primary_ip4.address }}
+   {% if primary_ip4.dns_name %}
+   ! DNS Name: {{ primary_ip4.dns_name }}
+   {% endif %}
    no shutdown
-   description "Management interface"
 !
-! Data interfaces
-interface Ethernet1
+{% endif %}
+!
+{% if config_context.vlans %}
+! VLANs from Config Context
+{% for vlan_id, vlan_name in config_context.vlans.items() %}
+vlan {{ vlan_id }}
+   name {{ vlan_name }}
+{% endfor %}
+!
+{% endif %}
+!
+! Interface Configuration
+{% for interface in interfaces %}
+{% if interface.name != 'Management0' %}
+interface {{ interface.name }}
+   {% if interface.description %}
+   description {{ interface.description }}
+   {% endif %}
+   {% if interface.enabled %}
    no shutdown
-   description "Uplink to dist1"
-   switchport mode trunk
-   switchport trunk allowed vlan 10
-!
-interface Ethernet2
+   {% else %}
    shutdown
-   description "Connected to workstation1 - DISABLED"
+   {% endif %}
+   {% if interface.untagged_vlan %}
    switchport mode access
-   switchport access vlan 10
-   ! PROBLEM: Interface is SHUTDOWN! Needs to be enabled
+   switchport access vlan {{ interface.untagged_vlan.id }}
+   {% elif interface.tagged_vlans %}
+   switchport mode trunk
+   switchport trunk allowed vlan {% for vlan in interface.tagged_vlans %}{{ vlan.id }}{% if not loop.last %},{% endif %}{% endfor %}
+   {% endif %}
+   {% if interface.ip_addresses %}
+   {% for ip in interface.ip_addresses %}
+   ip address {{ ip.address }}
+   {% endfor %}
+   {% endif %}
+   {% if interface.mac_address %}
+   ! MAC Address: {{ interface.mac_address }}
+   {% endif %}
 !
-interface Ethernet3
-   shutdown
-   description "Available for connections"
+{% endif %}
+{% endfor %}
 !
-! Define VLANs
-vlan 10
-   name Data_VLAN
+{% if config_context.ntp_servers %}
+! NTP Configuration
+{% for ntp_server in config_context.ntp_servers %}
+ntp server {{ ntp_server }}
+{% endfor %}
 !
-! Enable SSH
+{% endif %}
+!
+{% if config_context.syslog_servers %}
+! Logging Configuration
+{% for syslog_server in config_context.syslog_servers %}
+logging host {{ syslog_server }}
+{% endfor %}
+!
+{% endif %}
+!
+{% if config_context.snmp %}
+! SNMP Configuration
+{% if config_context.snmp.community %}
+snmp-server community {{ config_context.snmp.community }} ro
+{% endif %}
+{% if config_context.snmp.location %}
+snmp-server location {{ config_context.snmp.location }}
+{% endif %}
+{% if config_context.snmp.contact %}
+snmp-server contact {{ config_context.snmp.contact }}
+{% endif %}
+!
+{% endif %}
+!
+{% if role.name in ["distribution", "router"] %}
+! Enable routing (for distribution/router roles)
+ip routing
+!
+{% endif %}
+!
+! Enable Management APIs
+{% if platform.name == "Arista EOS" %}
+management api http-commands
+   no shutdown
+   protocol https
+!
+management api gnmi
+   transport grpc default
+      port 6030
+!
+management api netconf
+   transport ssh default
+!
+{% endif %}
+!
+! SSH Configuration
 management ssh
    no shutdown
 !
-! Enable API for automation
-management api http-commands
-   no shutdown
-   protocol http
-   protocol https port 443
-!
-! Basic security
+! Admin User
 username admin privilege 15 secret admin
+{% if config_context.additional_users %}
+{% for user in config_context.additional_users %}
+username {{ user.name }} privilege {{ user.privilege | default(15) }} secret {{ user.password }}
+{% endfor %}
+{% endif %}
+!
+{% if config_context.banner %}
+! Banner Configuration
+banner motd
+{{ config_context.banner }}
+EOF
+!
+{% endif %}
 !
 ! Save configuration
 write memory
 !
+end
 
