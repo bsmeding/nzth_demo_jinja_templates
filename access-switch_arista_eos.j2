@@ -4,7 +4,8 @@
 ! Location: {{ (location.parent.name ~ ' / ') if location and location.parent }}{{ location.name if location else 'n/a' }}
 ! Serial: {{ serial }}
 ! Primary IP: {{ primary_ip4.address if primary_ip4 else 'n/a' }}
-{# ===== Arista EOS Intended Config (corrected newlines) ===== #}
+
+
 {% macro join_sp(items, sep=' ') -%}
   {{ (items or []) | map('string') | join(sep) }}
 {%- endmacro %}
@@ -28,7 +29,7 @@ clock timezone {{ cc.timezone }}
 {% endif %}
 
 {% if cc.domain_name %}
-dns domain {{ cc.domain_name }}    {# was ip domain-name (deprecated) #}
+dns domain {{ cc.domain_name }}
 {% endif %}
 
 {% if cc.dns_servers %}
@@ -52,19 +53,34 @@ logging source-interface {{ ps.logging.source_interface }}
 logging buffered {{ ps.logging.buffer_size }}
 {% endif %}
 {% for h in cc.syslog_hosts %}
-{% if h.port %}logging host {{ h.host }} {{ h.port }}{% else %}logging host {{ h.host }}{% endif %}
+{% if h.port %}
+logging host {{ h.host }} {{ h.port }}
+{% else %}
+logging host {{ h.host }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if cc.snmp %}
-{% if cc.snmp.community %}snmp-server community {{ cc.snmp.community }} ro{% endif %}
-{% if cc.snmp.location %}snmp-server location {{ cc.snmp.location }}{% endif %}
+{% if cc.snmp.community %}
+snmp-server community {{ cc.snmp.community }} ro
+{% endif %}
+{% if cc.snmp.location %}
+snmp-server location {{ cc.snmp.location }}
+{% endif %}
 {% endif %}
 
 {% if features.lldp is defined %}
-{% if features.lldp %}lldp run{% else %}no lldp run{% endif %}
+{% if features.lldp %}
+lldp run
+{% else %}
+no lldp run
 {% endif %}
-{% if features.stp %}spanning-tree mode {{ features.stp }}{% endif %}
+{% endif %}
+
+{% if features.stp %}
+spanning-tree mode {{ features.stp }}
+{% endif %}
 
 ! ===== Management IP =====
 {% set mgmt_if = None %}
@@ -78,44 +94,51 @@ interface {{ mgmt_if }}
 ! ===== Interfaces =====
 {% set allowed_list = rs.get('allowed_vlans', []) %}
 {% for iface in interfaces or [] %}
-{# skip mgmt interface here to avoid duplicate L3 config #}
-{% if mgmt_if and iface.name == mgmt_if %}{% continue %}{% endif %}
-
+{% set is_mgmt = (mgmt_if and iface.name == mgmt_if) %}
+{% if not is_mgmt %}
 interface {{ iface.name }}
-   {% if iface.description %}description {{ iface.description }}{% endif %}
+   {% if iface.description %}
+description {{ iface.description }}
+   {% endif %}
 
    {% set ips = iface.ip_addresses or [] %}
    {% if ips|length > 0 %}
    no switchport
-   {% for ip in ips %}ip address {{ ip.address }}
+   {% for ip in ips %}
+   ip address {{ ip.address }}
    {% endfor %}
    no shutdown
    {% else %}
-     {% if iface.untagged_vlan %}
+      {% if iface.untagged_vlan %}
    switchport
    switchport mode access
-       {% if rs.default_vlan is defined %}
+         {% if rs.default_vlan is defined %}
    switchport access vlan {{ rs.default_vlan }}
-       {% else %}
-   ! NOTE: untagged VLAN seen but VID unknown; set role_specific.default_vlan
-       {% endif %}
-       {% if rs.stp_portfast %}spanning-tree portfast{% endif %}
+         {% else %}
+   ! NOTE: untagged VLAN present but VID unknown; set role_specific.default_vlan
+         {% endif %}
+         {% if rs.stp_portfast %}
+   spanning-tree portfast
+         {% endif %}
    no shutdown
-     {% elif iface.tagged_vlans and iface.tagged_vlans|length > 0 %}
+      {% elif iface.tagged_vlans and iface.tagged_vlans|length > 0 %}
    switchport
    switchport mode trunk
-       {% if allowed_list %}switchport trunk allowed vlan {{ allowed_list | join(',') }}
-       {% else %}! NOTE: tagged VLANs exist but only UUIDs available; define role_specific.allowed_vlans
-       {% endif %}
+         {% if allowed_list and allowed_list|length > 0 %}
+   switchport trunk allowed vlan {{ allowed_list | join(',') }}
+         {% else %}
+   ! NOTE: tagged VLANs exist but only UUIDs available; define role_specific.allowed_vlans
+         {% endif %}
    no shutdown
-     {% else %}
+      {% else %}
    switchport
    no shutdown
-     {% endif %}
+      {% endif %}
    {% endif %}
 
    {% if iface.cable %}
    ! cable: status={{ iface.cable.status.name if iface.cable.status else 'n/a' }} type={{ iface.cable.termination_a_type }} color={{ iface.cable.color or 'n/a' }}
    {% endif %}
 !
+{% endif %}
 {% endfor %}
