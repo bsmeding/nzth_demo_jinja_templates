@@ -4,8 +4,8 @@
 ! Location: {{ (location.parent.name ~ ' / ') if location and location.parent }}{{ location.name if location else 'n/a' }}
 ! Serial: {{ serial }}
 ! Primary IP: {{ primary_ip4.address if primary_ip4 else 'n/a' }}
+{# ===== Arista EOS Intended Config (corrected newlines) ===== #}
 
-{# ---- helpers ---- #}
 {% macro join_sp(items, sep=' ') -%}
   {{ (items or []) | map('string') | join(sep) }}
 {%- endmacro %}
@@ -24,63 +24,79 @@ EOF
 {% endif %}
 
 ! ===== System / Services =====
-{% if cc.timezone %}clock timezone {{ cc.timezone }}{% endif %}
+{% if cc.timezone %}
+clock timezone {{ cc.timezone }}
+{% endif %}
 
-{% if cc.domain_name %}ip domain-name {{ cc.domain_name }}{% endif %}
+{% if cc.domain_name %}
+ip domain-name {{ cc.domain_name }}
+{% endif %}
+
 {% if cc.dns_servers %}
 ip name-server {{ join_sp(cc.dns_servers) }}
 {% endif %}
 
 {% if cc.ntp_servers %}
-{# EOS uses 'ntp local-interface <ifname>' to set source #}
-{% if ps.ntp_source_interface %}ntp local-interface {{ ps.ntp_source_interface }}{% endif %}
+{% if ps.ntp_source_interface %}
+ntp local-interface {{ ps.ntp_source_interface }}
+{% endif %}
 {% for s in cc.ntp_servers %}
 ntp server {{ s }}
 {% endfor %}
 {% endif %}
 
 {% if cc.syslog_hosts %}
-{# EOS supports 'logging source-interface <ifname>' #}
-{% if ps.get('logging', {}).get('source_interface') %}logging source-interface {{ ps.logging.source_interface }}{% endif %}
-{% if ps.get('logging', {}).get('buffer_size') %}logging buffered {{ ps.logging.buffer_size }}{% endif %}
+{% if ps.get('logging', {}).get('source_interface') %}
+logging source-interface {{ ps.logging.source_interface }}
+{% endif %}
+{% if ps.get('logging', {}).get('buffer_size') %}
+logging buffered {{ ps.logging.buffer_size }}
+{% endif %}
 {% for h in cc.syslog_hosts %}
-{% if h.port %}logging host {{ h.host }} {{ h.port }}{% else %}logging host {{ h.host }}{% endif %}
+{% if h.port %}
+logging host {{ h.host }} {{ h.port }}
+{% else %}
+logging host {{ h.host }}
+{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if cc.snmp %}
-{% if cc.snmp.community %}snmp-server community {{ cc.snmp.community }} ro{% endif %}
-{% if cc.snmp.location %}snmp-server location {{ cc.snmp.location }}{% endif %}
+{% if cc.snmp.community %}
+snmp-server community {{ cc.snmp.community }} ro
+{% endif %}
+{% if cc.snmp.location %}
+snmp-server location {{ cc.snmp.location }}
+{% endif %}
 {% endif %}
 
-{# LLDP global (enabled by default in EOS; render explicitly if toggled) #}
 {% if features.lldp is defined %}
-{% if features.lldp %}lldp run{% else %}no lldp run{% endif %}
+{% if features.lldp %}
+lldp run
+{% else %}
+no lldp run
+{% endif %}
 {% endif %}
 
-{# STP mode (EOS supports rapid-pvst, mstp, etc.) #}
-{% if features.stp %}spanning-tree mode {{ features.stp }}{% endif %}
+{% if features.stp %}
+spanning-tree mode {{ features.stp }}
+{% endif %}
 
-! ===== Management IP (from primary_ip4/interface_assignments) =====
+! ===== Management IP =====
 {% if primary_ip4 and primary_ip4.interface_assignments and primary_ip4.interface_assignments|length > 0 %}
 {% set mgmt_if = primary_ip4.interface_assignments[0].interface.name %}
 interface {{ mgmt_if }}
-   {# If your environment uses a VRF for mgmt, set it here (e.g. 'vrf mgmt') #}
    ip address {{ primary_ip4.address }}
    no shutdown
 {% endif %}
 
 ! ===== Interfaces =====
-{# Heuristics:
-   - L3 if ip_addresses present -> 'no switchport' + addresses
-   - Else access if untagged_vlan present -> use rs.default_vlan fallback (no VID in GraphQL)
-   - Else trunk if any tagged_vlans present -> allowed list from rs.allowed_vlans
-   - stp portfast on access if rs.stp_portfast
-#}
 {% set allowed_list = rs.get('allowed_vlans', []) %}
 {% for iface in interfaces or [] %}
 interface {{ iface.name }}
-   {% if iface.description %}description {{ iface.description }}{% endif %}
+   {% if iface.description %}
+description {{ iface.description }}
+   {% endif %}
 
    {% set ips = iface.ip_addresses or [] %}
    {% if ips|length > 0 %}
@@ -89,41 +105,36 @@ interface {{ iface.name }}
    ip address {{ ip.address }}
    {% endfor %}
    no shutdown
-
    {% else %}
-
-     {% if iface.untagged_vlan %}
+      {% if iface.untagged_vlan %}
    switchport
    switchport mode access
-       {% if rs.default_vlan is defined %}
+         {% if rs.default_vlan is defined %}
    switchport access vlan {{ rs.default_vlan }}
-       {% else %}
-   ! NOTE: untagged VLAN present but VID not in GraphQL; set 'role_specific.default_vlan'
-       {% endif %}
-       {% if rs.stp_portfast %}spanning-tree portfast{% endif %}
+         {% else %}
+   ! NOTE: untagged VLAN present but no VID known
+         {% endif %}
+         {% if rs.stp_portfast %}
+   spanning-tree portfast
+         {% endif %}
    no shutdown
-
-     {% elif iface.tagged_vlans and iface.tagged_vlans|length > 0 %}
+      {% elif iface.tagged_vlans and iface.tagged_vlans|length > 0 %}
    switchport
    switchport mode trunk
-       {% if allowed_list and allowed_list|length > 0 %}
+         {% if allowed_list and allowed_list|length > 0 %}
    switchport trunk allowed vlan {{ allowed_list | join(',') }}
-       {% else %}
-   ! NOTE: tagged VLANs exist but only UUIDs available; define 'role_specific.allowed_vlans' numerically
-       {% endif %}
+         {% else %}
+   ! NOTE: tagged VLANs exist but only UUIDs available
+         {% endif %}
    no shutdown
-
-     {% else %}
+      {% else %}
    switchport
    no shutdown
-     {% endif %}
+      {% endif %}
    {% endif %}
 
-   {# Optional cable metadata as comments #}
    {% if iface.cable %}
    ! cable: status={{ iface.cable.status.name if iface.cable.status else 'n/a' }} type={{ iface.cable.termination_a_type }} color={{ iface.cable.color or 'n/a' }}
    {% endif %}
 !
 {% endfor %}
-
-
